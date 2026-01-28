@@ -40,14 +40,33 @@ model = NewsMLP(Xtr.shape[1], num_classes).to(device)
 opt = torch.optim.Adam(model.parameters(), lr=1e-3)
 crit = nn.CrossEntropyLoss()
 
-# 5) Torch training (minimal)
-def to_t(x): return torch.tensor(x, dtype=torch.float32, device=device)
-def to_y(x): return torch.tensor(x, dtype=torch.long, device=device)
-for epoch in range(8):
+# 5) Torch training with mini-batches
+from torch.utils.data import TensorDataset, DataLoader
+
+Xtr_t = torch.tensor(Xtr, dtype=torch.float32)
+ytr_t = torch.tensor(ytr, dtype=torch.long)
+Xte_t = torch.tensor(Xte, dtype=torch.float32)
+yte_t = torch.tensor(yte, dtype=torch.long)
+
+train_loader = DataLoader(TensorDataset(Xtr_t, ytr_t), batch_size=64, shuffle=True)
+
+for epoch in range(30):
     model.train()
-    logits = model(to_t(Xtr))
-    loss = crit(logits, to_y(ytr))
-    opt.zero_grad(); loss.backward(); opt.step()
+    total_loss = 0
+    for xb, yb in train_loader:
+        xb, yb = xb.to(device), yb.to(device)
+        logits = model(xb)
+        loss = crit(logits, yb)
+        opt.zero_grad(); loss.backward(); opt.step()
+        total_loss += loss.item()
+    
+    # Evaluate every 5 epochs
+    if (epoch + 1) % 5 == 0:
+        model.eval()
+        with torch.no_grad():
+            preds = model(Xte_t.to(device)).argmax(dim=1).cpu()
+            acc = (preds == yte_t).float().mean().item()
+        print(f"Epoch {epoch+1:2d} | Loss: {total_loss/len(train_loader):.4f} | Test Acc: {acc:.2%}")
 
 # 6) Export artifacts
 torch.save(model.state_dict(), "model_state_dict.pt")
